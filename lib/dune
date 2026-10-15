@@ -1,3 +1,5 @@
 (library
  (name bactria)
- (libraries base unboxed))
+ (libraries base unboxed unboxed_datatypes)
+ (preprocess
+  (pps ppx_template)))

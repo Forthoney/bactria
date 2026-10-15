@@ -2,12 +2,14 @@
 
 (name bactria)
 
+(implicit_transitive_deps false)
+
 (generate_opam_files true)
 
 (source
- (github username/reponame))
+ (github Forthoney/bactria))
 
-(authors "Author Name <author@example.com>")
+(authors "Seong-Heon Jung <castlehoneyjung@gmail.com>")
 
 (maintainers "Maintainer Name <maintainer@example.com>")
 
@@ -19,7 +21,7 @@
  (name bactria)
  (synopsis "A short synopsis")
  (description "A longer description")
- (depends ocaml base unboxed)
+ (depends ocaml base core unboxed unboxed_datatypes ppx_template)
  (tags
   ("add topics" "to describe" your project)))
 
