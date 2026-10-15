@@ -19,10 +19,10 @@ let parse_column c =
 
 let column_full col = sprintf "column %d is full" (col + 1)
 
-(* must be computed before [col] is played *)
-let outcome_of_move board col =
-  if Bitboard.is_winning_move board col then Win (Bitboard.current_player board)
-  else if Bitboard.num_moves board + 1 = Bitboard.width * Bitboard.height then Draw
+(* the game ends as soon as someone wins, so the winner is whoever just moved *)
+let outcome_of_board board =
+  if Bitboard.is_won board then Win (Player.other (Bitboard.current_player board))
+  else if Bitboard.is_full board then Draw
   else Continue
 
 let rec interactive board =
@@ -48,7 +48,7 @@ let rec interactive board =
       match Bitboard.play board col with
       | T #(None, _) -> retry (column_full col)
       | T #(Some, next) ->
-        let outcome = outcome_of_move board col in
+        let outcome = outcome_of_board next in
         match outcome with
         | Continue -> interactive next
         | Win _ | Draw ->
@@ -68,7 +68,7 @@ let rec process board moves =
       match Bitboard.play board col with
       | T #(None, _) -> Or_error.errorf "move %d: %s" i (column_full col)
       | T #(Some, next) ->
-        let outcome = outcome_of_move board col in
+        let outcome = outcome_of_board next in
         match outcome, rest with
         | Continue, _ -> process next rest
         | (Win _ | Draw), [] ->

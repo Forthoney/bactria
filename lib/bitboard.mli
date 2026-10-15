@@ -8,7 +8,8 @@ val width : int
 val height : int
 val play : t -> int -> (t Option_u.t[@kind bits64 & bits64])
 
-val is_winning_move : t -> int -> bool
+(* whether either player has four in a row *)
+val is_won : t -> bool
 
 val empty : t
 
@@ -20,3 +21,8 @@ val num_moves : t -> int
 val current_player : t -> Player.t
 
 val to_board : t -> Board.t
+
+(* [negamax game alpha beta] scores [game] for the player to move. If the true
+   score lies within [alpha, beta] it is returned exactly; otherwise the result
+   is a bound on the same side of the window as the true score *)
+val negamax : t -> int -> int -> int
