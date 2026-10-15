@@ -1,3 +1,5 @@
+(* A very straightforward implementation of a connect 4 board.
+   We purposefully avoid any optimizations *)
 type slot = Player.t or_null
 type t = {board : slot Array.t Array.t; mutable turn : Player.t}
 
