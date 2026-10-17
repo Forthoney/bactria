@@ -1,28 +1,24 @@
+open! Unboxed
 open Unboxed_datatypes
 
 (* We use an immutable board representation since this representation is
    compact enough to be "trivially" copyable *)
-type t : bits64 & bits64
+type t = #{pos : i64; nonempty : i64}
 
 val width : int
 val height : int
-val play : t -> int -> (t Option_u.t[@kind bits64 & bits64])
+val play : t -> int -> (t Option_u.t[@kind bits64 & bits64]) [@@zero_alloc]
 
 (* whether either player has four in a row *)
-val is_won : t -> bool
+val is_won : t -> bool [@@zero_alloc]
 
 val empty : t
 
-val is_full : t -> bool
+val is_full : t -> bool [@@zero_alloc]
 
 (* number of moves since the beginning of the game *)
-val num_moves : t -> int
+val num_moves : t -> int [@@zero_alloc]
 (* the player whose turn it is; Red moves first *)
 val current_player : t -> Player.t
 
 val to_board : t -> Board.t
-
-(* [negamax game alpha beta] scores [game] for the player to move. If the true
-   score lies within [alpha, beta] it is returned exactly; otherwise the result
-   is a bound on the same side of the window as the true score *)
-val negamax : t -> int -> int -> int

@@ -15,6 +15,9 @@ depends: [
   "base"
   "core"
   "unboxed"
+  "unboxed_datatypes"
+  "ppx_template"
+  "ocaml_simd"
   "odoc" {with-doc}
 ]
 build: [

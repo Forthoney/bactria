@@ -21,7 +21,7 @@
  (name bactria)
  (synopsis "A short synopsis")
  (description "A longer description")
- (depends ocaml base core unboxed unboxed_datatypes ppx_template)
+ (depends ocaml base core unboxed unboxed_datatypes ppx_template ocaml_simd)
  (tags
   ("add topics" "to describe" your project)))
 
