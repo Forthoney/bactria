@@ -1,6 +1,12 @@
 (executable
  (public_name bactria)
  (name main)
- (libraries core core_unix.command_unix unboxed_datatypes bactria)
+ (libraries
+  base
+  core
+  core_unix.command_unix
+  core_unix.filename_unix
+  unboxed_datatypes
+  bactria)
  (preprocess
   (pps ppx_jane)))

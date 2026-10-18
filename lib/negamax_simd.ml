@@ -13,8 +13,8 @@ open Bitboard
 
    We "waste" the last lane of high.
    NOTE: when AVX-512 support is added, we would be able to do this with a single AVX-512 "register" *)
+module Ix4 = Ocaml_simd_avx.Int64x4
 module Children = struct
-  module Ix4 = Ocaml_simd_avx.Int64x4
   type t = #{pos : i64; low : Ix4.t; high : Ix4.t}
 
   (* [bot_mask col] (see above) for four columns at once: bit [7 * col]. *)
@@ -31,22 +31,22 @@ module Children = struct
      ; low = Ix4.(nonempty_v lor (nonempty_v + bot_low))
      ; high = Ix4.(nonempty_v lor (nonempty_v + bot_high)) }
 
-  (* Bit [i] of the result is set iff the move in lane [i] is legal.
-
-     A column is full when its 6 cells are all stones, and then the carry in
-     [of_board] runs all the way out of the column and sets the sentinel bit above
-     row 5. A legal move can never set that bit. [bot lsl 6] is exactly the
-     sentinel of each lane's column (bit [7 * col + 6]), so one AND finds the
-     overflow. [movemask] gathers the top bit of every 64-bit lane into an
-     integer, and comparing with zero first turns "lane is 0" into "all bits 1". *)
-  let [@inline] legal_lanes nonempty ~bot =
-    let sentinel = Ix4.shifti_left_logical #6L bot in
-    Ix4.(movemask ((nonempty land sentinel) = zero))
-
   (* Bit [c] of the result is set iff playing column [c] is legal. Lane 3 of [high]
      is the nonexistent column 7, so only 3 of its lanes are kept; the two halves
      are then joined into bits 0-6. *)
   let legal #{pos = _; low; high} =
+    (* Bit [i] of the result is set iff the move in lane [i] is legal.
+
+       A column is full when its 6 cells are all stones, and then the carry in
+       [of_board] runs all the way out of the column and sets the sentinel bit above
+       row 5. A legal move can never set that bit. [bot lsl 6] is exactly the
+       sentinel of each lane's column (bit [7 * col + 6]), so one AND finds the
+       overflow. [movemask] gathers the top bit of every 64-bit lane into an
+       integer, and comparing with zero first turns "lane is 0" into "all bits 1". *)
+    let [@inline] legal_lanes nonempty ~bot =
+      let sentinel = Ix4.shifti_left_logical #6L bot in
+      Ix4.(movemask ((nonempty land sentinel) = zero))
+    in
     I64.O.(
       legal_lanes low ~bot:bot_low lor ((legal_lanes high ~bot:bot_high land #7L) lsl 4))
 
@@ -89,24 +89,45 @@ module Children = struct
     #{pos; nonempty}
 end
 
-let [@zero_alloc] rec solve game ~a:alpha ~b:beta =
-  if is_full game then 0
-  else
-    let children = Children.of_board game in
-    let legal = Children.legal children in
-    (* if any legal move wins, we are done without recursing *)
-    if I64.O.(Children.winning children <> zero) then
-      (width * height + 1 - num_moves game) / 2
+module Make (C : Negamax_intf.Config) = struct
+  let [@zero_alloc] rec solve game ~a:alpha ~b:beta =
+    if is_full game then 0
     else
-      let upper = (width * height - 1 - num_moves game) / 2 in
-      let beta = min beta upper in
-      if alpha >= beta then beta
+      let children = Children.of_board game in
+      let legal = Children.legal children in
+      (* if any legal move wins, we are done without recursing *)
+      if I64.O.(Children.winning children <> zero) then
+        (width * height + 1 - num_moves game) / 2
       else
-        let [@inline] [@loop] rec search col alpha =
-          if col = width then alpha
-          else if I64.O.(legal land (#1L lsl col) = zero) then search (col + 1) alpha
-          else
-            let score = -solve (Children.get children col) ~a:(-beta) ~b:(-alpha) in
-            if score >= beta then score else search (col + 1) (max alpha score)
-        in
-        search 0 alpha
+        let upper = (width * height - 1 - num_moves game) / 2 in
+        let beta = min beta upper in
+        if alpha >= beta then beta
+        else
+          (* an explicit loop rather than [Array.fold_until]: see [Negamax] *)
+          let [@loop] rec search alpha i =
+            if i = Array.length C.order then alpha
+            else
+              let col = C.order.(i) in
+              if I64.O.(legal land (#1L lsl col) = zero) then search alpha (i + 1)
+              else
+                let score = -solve (Children.get children col) ~a:(-beta) ~b:(-alpha) in
+                if score >= beta then score else search (max alpha score) (i + 1)
+          in
+          search alpha 0
+
+  module Strong = struct
+    let bound = width * height / 2
+    let solve game = solve game ~a:(-bound) ~b:bound
+  end
+
+  module Weak = struct
+    let solve game : Player.outcome =
+      let score = solve game ~a:(-1) ~b:1 in
+      let player = Bitboard.current_player game in
+      if score > 0 then Win player
+      else if score < 0 then Win (Player.other player)
+      else Draw
+  end
+end
+
+module Center_first = Make (struct let order = [| 3; 2; 4; 1; 5; 0; 6 |] end)

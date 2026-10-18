@@ -29,10 +29,6 @@ let height = 6
 
 let empty = #{pos = #0L; nonempty = #0L}
 
-(* Unique identifier for a position: pos + nonempty *)
-let key #{pos; nonempty} =
-  I64.O.(pos + nonempty)
-
 let col_shift col = col * (height + 1)
 
 (* the topmost real cell (row 5) of [col] *)
@@ -124,3 +120,19 @@ let to_board board : Board.t =
         else This to_move)) in
   {board = board; turn = to_move}
 
+(* [String.fold] can't be used here: its accumulator must have a single-register
+   layout, and [t] is [bits64 & bits64]. *)
+let init_with moves =
+  let mutable board = empty in
+  for i = 0 to String.length moves - 1 do
+    let col = Char.to_int moves.[i] - Char.to_int '1' in
+    match play board col with
+    | T #(Some, board') -> board <- board'
+    | T #(None, _) -> invalid_arg (String.of_char moves.[i])
+  done;
+  board
+
+let outcome board =
+  if is_won board then Player.Win (Player.other (current_player board))
+  else if is_full board then Player.Draw
+  else Player.Continue

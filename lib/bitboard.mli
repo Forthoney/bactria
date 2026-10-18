@@ -13,6 +13,7 @@ val play : t -> int -> (t Option_u.t[@kind bits64 & bits64]) [@@zero_alloc]
 val is_won : t -> bool [@@zero_alloc]
 
 val empty : t
+val init_with : string -> t
 
 val is_full : t -> bool [@@zero_alloc]
 

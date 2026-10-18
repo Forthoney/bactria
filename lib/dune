@@ -1,6 +1,7 @@
 (library
  (name bactria)
  (libraries base unboxed unboxed_datatypes ocaml_simd ocaml_simd.avx)
- (ocamlopt_flags (:standard -O3))
+ (ocamlopt_flags
+  (:standard -O3))
  (preprocess
   (pps ppx_template)))
