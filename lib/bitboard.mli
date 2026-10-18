@@ -23,3 +23,5 @@ val num_moves : t -> int [@@zero_alloc]
 val current_player : t -> Player.t
 
 val to_board : t -> Board.t
+
+val outcome : t -> Player.outcome
