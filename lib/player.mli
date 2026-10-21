@@ -12,4 +12,4 @@ val outcome_to_string : outcome -> string
 
 (* First player to go *)
 val first : t
-val other : t -> t
+val other : t -> t [@@zero_alloc]

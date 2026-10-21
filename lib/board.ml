@@ -8,7 +8,6 @@ let slot_to_char = function
   | This Player.Yellow -> 'O'
 ;;
 
-(* indexed [board.(col).(row)], with row 0 at the bottom *)
 type t =
   { board : slot Array.t Array.t
   ; mutable turn : Player.t
@@ -40,10 +39,7 @@ let num_moves { board; turn = _ } =
   Array.sum (module Int) ~f:(Array.count ~f:Or_null.is_this) board
 ;;
 
-(* [height] rows of cells, top row first, then a footer of 1-based column numbers. Every
-   line is [width] characters separated by spaces and ends in a newline, except the last,
-   so the whole string is built in one allocation from each position. *)
-let to_string { board; turn = _ } =
+let to_string ({ board; turn = _ } @ local) =
   let line_length = 2 * width in
   String.init
     (((height + 1) * line_length) - 1)
@@ -58,7 +54,7 @@ let to_string { board; turn = _ } =
         then slot_to_char board.(col).(height - 1 - line)
         else
           (* the footer: one digit per column, so [width] must stay below 10 *)
-          Char.of_int_exn (Char.to_int '1' + col))
+          Char.of_int_exn (Char.to_int '1' + col)) [@nontail]
 ;;
 
 let current_player { board = _; turn } = turn

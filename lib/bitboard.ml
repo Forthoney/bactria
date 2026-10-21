@@ -2,6 +2,8 @@ open! Base
 open! Unboxed
 open Unboxed_datatypes
 
+[@@@zero_alloc all]
+
 (* A position is two 64-bit integers. Layout: We store the board in column major order.
    Each column uses 7 bits: 6 bits for data + 1 sentinel bit (always 0)
 
@@ -29,7 +31,7 @@ let empty = #{ pos = #0L; nonempty = #0L }
 (* A unique identifier for a position, at most 49 bits. [pos + nonempty] adds one bit just
    above the top stone of each column, which encodes the column heights, and [pos] alone
    then tells whose stones are where. *)
-let[@zero_alloc] key #{ pos; nonempty } = I64.O.(pos + nonempty)
+let key #{ pos; nonempty } = I64.O.(pos + nonempty)
 let col_shift col = col * (height + 1)
 
 (* the topmost real cell (row 5) of [col] *)
@@ -56,7 +58,7 @@ let can_play #{ pos; nonempty } col =
       clearing it and setting the first empty cell above: 0b0000111 + 0b0000001 =
       0b0001000. Other columns are untouched because the carry stops at the first 0.
       OR-ing with the old [nonempty] puts the cleared stones back, leaving 0b0001111. *)
-let[@zero_alloc] play (#{ pos; nonempty } as game) col =
+let play (#{ pos; nonempty } as game) col =
   if can_play game col
   then
     (Option_u.some [@kind bits64 & bits64])
@@ -65,9 +67,7 @@ let[@zero_alloc] play (#{ pos; nonempty } as game) col =
   else (Option_u.none [@kind bits64 & bits64]) ()
 ;;
 
-let[@zero_alloc] num_moves #{ pos = _; nonempty } =
-  I64.to_int_trunc (I64.popcount nonempty)
-;;
+let num_moves #{ pos = _; nonempty } = I64.to_int_trunc (I64.popcount nonempty)
 
 (* Is there a line of four stones in [pos] whose neighbouring cells are [shift] bits
    apart?
@@ -100,7 +100,7 @@ let[@inline] is_aligned pos =
 (* Has anyone won? We test both players: [pos] is the player to move and
    [pos lxor nonempty] the player who just moved. (Only the latter can have a new line,
    since the game ends on the first one, but checking both is harmless.) *)
-let[@inline] [@zero_alloc] is_won #{ pos; nonempty } =
+let[@inline] is_won #{ pos; nonempty } =
   is_aligned pos || is_aligned I64.O.(pos lxor nonempty)
 ;;
 
@@ -109,12 +109,12 @@ let is_full board = num_moves board = width * height
 (* Red moves first, so the parity of the stone count gives the turn *)
 let current_player board = if num_moves board % 2 = 0 then Player.Red else Player.Yellow
 
-let to_board board : Board.t =
+let[@zero_alloc ignore] to_board board : Board.t =
   let #{ pos; nonempty } = board in
   let to_move = current_player board in
   let other = Player.other to_move in
   let board =
-    Array.init width ~f:(fun col ->
+    Array.init width ~f:(fun [@zero_alloc ignore] col ->
       Array.init height ~f:(fun row ->
         let bit = I64.O.(#1L lsl Int.(col_shift col + row)) in
         if I64.O.(nonempty land bit = zero)
@@ -123,7 +123,7 @@ let to_board board : Board.t =
         then This other
         else This to_move))
   in
-  { board; turn = to_move }
+  exclave_ { board; turn = to_move }
 ;;
 
 (* [String.fold] can't be used here: its accumulator must have a single-register layout,
@@ -139,7 +139,7 @@ let init_with moves =
   board
 ;;
 
-let outcome board =
+let[@zero_alloc ignore] outcome board =
   if is_won board
   then Player.Win (Player.other (current_player board))
   else if is_full board
