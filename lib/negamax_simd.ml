@@ -96,12 +96,17 @@ module Children = struct
   ;;
 end
 
-module Make (C : Negamax_intf.Config) = struct
-  (* positions visited since the last top-level [solve] began *)
-  let nodes = ref 0
+let order = [| 3; 2; 4; 1; 5; 0; 6 |]
 
-  let rec solve (cache @ local) game ~a:alpha ~b:beta =
-    Int.incr nodes;
+let solve ?(with_cache : Cache.t option @ local) (module Stat : Stat_intf.S) game =
+  let cache =
+    match with_cache with
+    | Some cache -> cache
+    | None -> Cache.create Cache.default_size
+  in
+  let stat = Stat.init () in
+  let rec loop game ~a:alpha ~b:beta =
+    Stat.node stat;
     if is_full game
     then 0
     else (
@@ -119,7 +124,7 @@ module Make (C : Negamax_intf.Config) = struct
           let legal = Children.legal children in
           let score =
             Array.fold_until
-              C.order
+              order
               ~init:alpha
               ~finish:Fn.id
               ~f:(fun [@inline] alpha col ->
@@ -127,7 +132,7 @@ module Make (C : Negamax_intf.Config) = struct
                 | #0L -> Continue alpha
                 | _ ->
                   let score =
-                    -solve cache (Children.get children col) ~a:(-beta) ~b:(-alpha)
+                    -loop (Children.get children col) ~a:(-beta) ~b:(-alpha)
                   in
                   if score >= beta then Stop score else Continue (max alpha score))
           in
@@ -135,39 +140,8 @@ module Make (C : Negamax_intf.Config) = struct
           score)
       (* if any legal move wins, we are done *)
       | _ -> ((width * height) + 1 - num_moves game) / 2)
-  ;;
-
-  let node_count () = !nodes
-
-  (* Searches with [with_cache] if given, which may already hold bounds from earlier
-     solves; otherwise with a fresh cache, freed when this returns *)
-  let solve ?(with_cache : Cache.t option @ local) game ~a ~b =
-    nodes := 0;
-    let cache =
-      match with_cache with
-      | Some cache -> cache
-      | None -> Cache.create Cache.default_size
-    in
-    solve cache game ~a ~b [@nontail]
-  ;;
-
-  module Strong = struct
-    let bound = width * height / 2
-    let solve ?with_cache game = solve ?with_cache game ~a:(-bound) ~b:bound
-  end
-
-  module Weak = struct
-    let solve ?with_cache game : Player.outcome =
-      let score = solve ?with_cache game ~a:(-1) ~b:1 in
-      let player = Bitboard.current_player game in
-      match Ordering.of_int (compare score 0) with
-      | Equal -> Draw
-      | Greater -> Win player
-      | Less -> Win (Player.other player)
-    ;;
-  end
-end
-
-module Center_first = Make (struct
-    let order = [| 3; 2; 4; 1; 5; 0; 6 |]
-  end)
+  in
+  let bound = width * height / 2 in
+  Stat.start stat;
+  loop game ~a:(-bound) ~b:bound [@nontail]
+;;

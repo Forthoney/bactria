@@ -5,7 +5,7 @@ let solve_lines =
   In_channel.iter_lines ~f:(fun line ->
     let board = Bitboard.init_with line in
     if Bitboard.is_won board then invalid_arg (sprintf "game is already over: %s" line);
-    Negamax_simd.Center_first.Strong.solve board
+    Negamax_simd.solve (module Stat_nop) board
     |> Int.to_string
     |> Out_channel.print_endline)
 ;;
