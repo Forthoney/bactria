@@ -1,5 +1,11 @@
-type t = Red | Yellow
-type outcome = Win of t | Draw | Continue
+type t =
+  | Red
+  | Yellow
+
+type outcome =
+  | Win of t
+  | Draw
+  | Continue
 
 val to_string : t -> string
 val outcome_to_string : outcome -> string
