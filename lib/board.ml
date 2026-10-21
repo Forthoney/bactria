@@ -2,10 +2,10 @@ open! Base
 
 type slot = Player.t or_null
 
-let slot_to_string = function
-  | Null -> "."
-  | This Player.Red -> "X"
-  | This Player.Yellow -> "O"
+let slot_to_char = function
+  | Null -> '.'
+  | This Player.Red -> 'X'
+  | This Player.Yellow -> 'O'
 ;;
 
 (* indexed [board.(col).(row)], with row 0 at the bottom *)
@@ -40,16 +40,25 @@ let num_moves { board; turn = _ } =
   Array.sum (module Int) ~f:(Array.count ~f:Or_null.is_this) board
 ;;
 
+(* [height] rows of cells, top row first, then a footer of 1-based column numbers. Every
+   line is [width] characters separated by spaces and ends in a newline, except the last,
+   so the whole string is built in one allocation from each position. *)
 let to_string { board; turn = _ } =
-  let row r =
-    List.init width ~f:(fun col -> slot_to_string board.(col).(r))
-    |> String.concat ~sep:" "
-  in
-  let rows = List.init height ~f:(fun i -> row (height - 1 - i)) in
-  let footer =
-    List.init width ~f:(fun col -> Int.to_string (col + 1)) |> String.concat ~sep:" "
-  in
-  String.concat ~sep:"\n" (rows @ [ footer ])
+  let line_length = 2 * width in
+  String.init
+    (((height + 1) * line_length) - 1)
+    ~f:(fun i ->
+      let line = i / line_length in
+      match i % line_length with
+      | c when c = line_length - 1 -> '\n'
+      | c when c % 2 = 1 -> ' '
+      | c ->
+        let col = c / 2 in
+        if line < height
+        then slot_to_char board.(col).(height - 1 - line)
+        else
+          (* the footer: one digit per column, so [width] must stay below 10 *)
+          Char.of_int_exn (Char.to_int '1' + col))
 ;;
 
 let current_player { board = _; turn } = turn

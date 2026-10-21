@@ -160,11 +160,10 @@ module Make (C : Negamax_intf.Config) = struct
     let solve ?with_cache game : Player.outcome =
       let score = solve ?with_cache game ~a:(-1) ~b:1 in
       let player = Bitboard.current_player game in
-      if score > 0
-      then Win player
-      else if score < 0
-      then Win (Player.other player)
-      else Draw
+      match Ordering.of_int (compare score 0) with
+      | Equal -> Draw
+      | Greater -> Win player
+      | Less -> Win (Player.other player)
     ;;
   end
 end
