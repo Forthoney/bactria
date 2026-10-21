@@ -39,7 +39,7 @@ let num_moves { board; turn = _ } =
   Array.sum (module Int) ~f:(Array.count ~f:Or_null.is_this) board
 ;;
 
-let to_string ({ board; turn = _ } @ local) =
+let to_string { board; turn = _ } =
   let line_length = 2 * width in
   String.init
     (((height + 1) * line_length) - 1)
@@ -54,7 +54,7 @@ let to_string ({ board; turn = _ } @ local) =
         then slot_to_char board.(col).(height - 1 - line)
         else
           (* the footer: one digit per column, so [width] must stay below 10 *)
-          Char.of_int_exn (Char.to_int '1' + col)) [@nontail]
+          Char.of_int_exn (Char.to_int '1' + col))
 ;;
 
 let current_player { board = _; turn } = turn

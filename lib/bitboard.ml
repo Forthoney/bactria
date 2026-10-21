@@ -123,7 +123,7 @@ let[@zero_alloc ignore] to_board board : Board.t =
         then This other
         else This to_move))
   in
-  exclave_ { board; turn = to_move }
+  { board; turn = to_move }
 ;;
 
 (* [String.fold] can't be used here: its accumulator must have a single-register layout,

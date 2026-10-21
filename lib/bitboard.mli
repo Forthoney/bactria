@@ -30,5 +30,5 @@ val num_moves : t -> int
 
 (* the player whose turn it is; Red moves first *)
 val current_player : t -> Player.t
-val to_board : t -> Board.t @ local [@@zero_alloc ignore]
+val to_board : t -> Board.t [@@zero_alloc ignore]
 val outcome : t -> Player.outcome [@@zero_alloc ignore]

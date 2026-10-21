@@ -38,7 +38,7 @@ module Children = struct
   (* Bit [c] of the result is set iff playing column [c] is legal. Lane 3 of [high] is the
      nonexistent column 7, so only 3 of its lanes are kept; the two halves are then joined
      into bits 0-6. *)
-  let[@inline] legal #{ pos = _; low; high } =
+  let[@inline] legal #{ pos = _; low; high } : i64 =
     (* Bit [i] of the result is set iff the move in lane [i] is legal.
 
        A column is full when its 6 cells are all stones, and then the carry in [of_board]
@@ -105,43 +105,45 @@ let solve ?(with_cache : Cache.t option @ local) (module Stat : Stat_intf.S) gam
     | None -> Cache.create Cache.default_size
   in
   let stat = Stat.init () in
-  let rec loop game ~a:alpha ~b:beta =
+  let rec loop game ~a:(alpha : i64) ~b:(beta : i64) : i64 =
     Stat.node stat;
     if is_full game
-    then 0
+    then #0L
     else (
       let children = Children.of_board game in
-      match Children.winning children with
-      | #0L ->
+      let moves = num_moves game in
+      if I64.O.(Children.winning children <> zero)
+      then I64.of_int (((width * height) + 1 - moves) / 2)
+      else (
         let key = Bitboard.key game in
-        let upper = ((width * height) - 1 - num_moves game) / 2 in
+        let upper = I64.of_int (((width * height) - 1 - moves) / 2) in
         (* an earlier search of this position may have found a tighter bound *)
-        let upper = min upper (I64.to_int_trunc (Cache.find cache key)) in
-        let beta = min beta upper in
-        if alpha >= beta
+        let upper = I64.min upper (Cache.find cache key) in
+        let beta = I64.min beta upper in
+        if I64.O.(alpha >= beta)
         then beta
         else (
           let legal = Children.legal children in
-          let score =
-            Array.fold_until
-              order
-              ~init:alpha
-              ~finish:Fn.id
-              ~f:(fun [@inline] alpha col ->
-                match I64.O.(legal land (#1L lsl col)) with
-                | #0L -> Continue alpha
-                | _ ->
-                  let score =
-                    -loop (Children.get children col) ~a:(-beta) ~b:(-alpha)
-                  in
-                  if score >= beta then Stop score else Continue (max alpha score))
+          (* tries the columns from [order.(i)] on *)
+          let[@inline] [@loop] rec search i alpha =
+            if i = Array.length order
+            then alpha
+            else if I64.O.(legal land (#1L lsl order.(i)) = zero)
+            then search (i + 1) alpha
+            else (
+              let child = Children.get children order.(i) in
+              let score = I64.O.(-loop child ~a:(-beta) ~b:(-alpha)) in
+              if I64.O.(score >= beta)
+              then score
+              else search (i + 1) (I64.max alpha score))
           in
-          if score < beta then Cache.set cache ~key ~data:(I64.of_int score);
-          score)
-      (* if any legal move wins, we are done *)
-      | _ -> ((width * height) + 1 - num_moves game) / 2)
+          let score = search 0 alpha in
+          if I64.O.(score < beta) then Cache.set cache ~key ~data:score;
+          score)))
   in
-  let bound = width * height / 2 in
+  let bound = I64.of_int (width * height / 2) in
   Stat.start stat;
-  loop game ~a:(-bound) ~b:bound [@nontail]
+  let score = loop game ~a:(I64.neg bound) ~b:bound in
+  Stat.finish stat;
+  I64.to_int_exn score
 ;;

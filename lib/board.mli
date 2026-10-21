@@ -14,4 +14,4 @@ val make : unit -> t
 val is_full : t -> bool
 val num_moves : t -> int
 val current_player : t -> Player.t
-val to_string : t @ local -> string
+val to_string : t -> string
