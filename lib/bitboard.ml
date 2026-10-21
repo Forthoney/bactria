@@ -23,11 +23,17 @@ open Unboxed_datatypes
    [nonempty] has a bit for every chip.
    [pos] has a bit for every chip belonging to the player to move. *)
 type t = #{pos : i64; nonempty : i64}
+type key = int64#
 
 let width = 7
 let height = 6
 
 let empty = #{pos = #0L; nonempty = #0L}
+
+(* A unique identifier for a position, at most 49 bits. [pos + nonempty] adds one
+   bit just above the top stone of each column, which encodes the column heights,
+   and [pos] alone then tells whose stones are where. *)
+let [@zero_alloc] key #{pos; nonempty} = I64.O.(pos + nonempty)
 
 let col_shift col = col * (height + 1)
 
@@ -64,7 +70,7 @@ let [@zero_alloc] play (#{pos; nonempty} as game) col =
   else (Option_u.none [@kind bits64 & bits64]) ()
 
 let [@zero_alloc] num_moves #{pos = _; nonempty} =
-  I64.to_int_exn (I64.popcount nonempty)
+  I64.to_int_trunc (I64.popcount nonempty)
 
 (* Is there a line of four stones in [pos] whose neighbouring cells are [shift]
    bits apart?
@@ -82,13 +88,13 @@ let [@zero_alloc] num_moves #{pos = _; nonempty} =
      8 (=7+1)  next column, one row up              (diagonal, ascending)
    A line that would wrap around the top of a column must step over a sentinel
    bit, which is never set, so it fails the test. *)
-let has_four pos shift =
+let [@inline] has_four pos shift =
   let shift2 = 2 * shift in
   let open I64.O in
   let m = pos land (pos lsr shift) in
   m land (m lsr shift2) <> zero
 
-let is_aligned pos =
+let [@inline] is_aligned pos =
   has_four pos (height + 1)    (* horizontal *)
   || has_four pos height       (* diagonal 1 *)
   || has_four pos (height + 2) (* diagonal 2 *)
@@ -97,7 +103,7 @@ let is_aligned pos =
 (* Has anyone won? We test both players: [pos] is the player to move and
    [pos lxor nonempty] the player who just moved. (Only the latter can have a new
    line, since the game ends on the first one, but checking both is harmless.) *)
-let [@zero_alloc] is_won #{pos; nonempty} =
+let [@inline] [@zero_alloc] is_won #{pos; nonempty} =
   is_aligned pos || is_aligned I64.O.(pos lxor nonempty)
 
 let is_full board =

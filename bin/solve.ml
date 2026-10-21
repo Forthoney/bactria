@@ -1,10 +1,8 @@
 open! Core
 open Bactria
 
-(* Solve the position on each line of [ic]. Unless [unsafe], a position that is
-   already won is rejected, since the solver assumes the game is still going. *)
-let solve_lines ic =
-  In_channel.iter_lines ic ~f:(fun line ->
+let solve_lines =
+  In_channel.iter_lines ~f:(fun line ->
     let board = Bitboard.init_with line in
     if Bitboard.is_won board then
       invalid_arg (sprintf "game is already over: %s" line);

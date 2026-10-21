@@ -1,11 +1,16 @@
 open! Base
+open! Unboxed
 open Bitboard
 
 module Make (C : Negamax_intf.Config) = struct
-  let [@zero_alloc] rec solve game ~a:alpha ~b:beta =
+  (* positions visited since the last top-level [solve] began *)
+  let nodes = ref 0
+
+  let [@zero_alloc] rec solve_with (cache @ local) game ~a:alpha ~b:beta =
+    Int.incr nodes;
     if is_full game then 0
     else
-      let [@loop] rec has_winning_move col =
+      let [@inline] [@loop] rec has_winning_move col =
         col < width &&
         match play game col with
         | T #(Some, next) when is_won next -> true
@@ -15,34 +20,53 @@ module Make (C : Negamax_intf.Config) = struct
       else
         (* we cannot win this move, so the best we can hope for is winning on our next
            move, which is one move (two stones) later than the bound above *)
+        let key = Bitboard.key game in
         let upper = (width * height - 1 - num_moves game) / 2 in
+        (* an earlier search of this position may have found a tighter bound *)
+        let upper = min upper (I64.to_int_trunc (Cache.find cache key)) in
         let beta = min beta upper in
         (* the window is empty: no score we could return would matter *)
         if alpha >= beta then beta
         else
           (* an explicit loop rather than [Array.fold_until]: with [C.order] abstract,
              the generic fold cannot rule out a float array and may allocate *)
-          let [@loop] rec search alpha i =
+          let [@inline] [@loop] rec search alpha i =
             if i = Array.length C.order then alpha
             else
               match play game C.order.(i) with
               | T #(Some, next) ->
                 (* the opponent's window is ours, negated and swapped *)
-                let score = -solve next ~a:(-beta) ~b:(-alpha) in
+                let score = -solve_with cache next ~a:(-beta) ~b:(-alpha) in
                 (* beta cutoff: the opponent would never let us reach this position *)
                 if score >= beta then score else search (max alpha score) (i + 1)
               | T #(None, _) -> search alpha (i + 1)
           in
-          search alpha 0
+          let score = search alpha 0 in
+          (* below [beta] means no move caused a cutoff, so [score] is an upper bound *)
+          if score < beta then Cache.set cache ~key ~data:(I64.of_int score);
+          score
+
+  let node_count () = !nodes
+
+  (* Searches with [with_cache] if given, which may already hold bounds from
+     earlier solves; otherwise with a fresh cache, freed when this returns *)
+  let solve ?(with_cache : Cache.t option @ local) game ~a ~b =
+    nodes := 0;
+    let cache =
+      match with_cache with
+      | Some cache -> cache
+      | None -> Cache.create Cache.default_size
+    in
+    solve_with cache game ~a ~b [@nontail]
 
   module Strong = struct
     let bound = width * height / 2
-    let solve game = solve game ~a:(-bound) ~b:bound
+    let solve ?with_cache game = solve ?with_cache game ~a:(-bound) ~b:bound
   end
 
   module Weak = struct
-    let solve game : Player.outcome =
-      let score = solve game ~a:(-1) ~b:1 in
+    let solve ?with_cache game : Player.outcome =
+      let score = solve ?with_cache game ~a:(-1) ~b:1 in
       let player = Bitboard.current_player game in
       if score > 0 then Win player
       else if score < 0 then Win (Player.other player)

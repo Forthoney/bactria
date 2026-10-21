@@ -25,7 +25,7 @@ module Children = struct
   (* [play] with every lane playing a different column:
        pos'      = pos lxor nonempty                  (same in every lane)
        nonempty' = nonempty lor (nonempty + bot)      (the carry trick: see play) *)
-  let of_board (#{pos; nonempty} : Bitboard.t) =
+  let [@inline] of_board (#{pos; nonempty} : Bitboard.t) =
     let nonempty_v = Ix4.set1 nonempty in
     #{ pos = I64.O.(pos lxor nonempty)
      ; low = Ix4.(nonempty_v lor (nonempty_v + bot_low))
@@ -34,7 +34,7 @@ module Children = struct
   (* Bit [c] of the result is set iff playing column [c] is legal. Lane 3 of [high]
      is the nonexistent column 7, so only 3 of its lanes are kept; the two halves
      are then joined into bits 0-6. *)
-  let legal #{pos = _; low; high} =
+  let [@inline] legal #{pos = _; low; high} =
     (* Bit [i] of the result is set iff the move in lane [i] is legal.
 
        A column is full when its 6 cells are all stones, and then the carry in
@@ -73,14 +73,14 @@ module Children = struct
     Ix4.(movemask (any <> zero))
 
   (* Bit [c] of the result is set iff playing column [c] is legal and wins. *)
-  let winning (#{pos; low; high} as children) =
+  let [@inline] winning (#{pos; low; high} as children) =
     let winning =
       I64.O.(winning_lanes pos low lor (winning_lanes pos high lsl 4))
     in
     I64.O.(winning land legal children)
 
   (* The board after playing column [col]; [col] must be legal *)
-  let get #{pos; low; high} col : Bitboard.t =
+  let [@inline] get #{pos; low; high} col : Bitboard.t =
     let col = I64.of_int col in
     let nonempty =
       if I64.(col < #4L) then Ix4.extract ~idx:col low
@@ -90,39 +90,63 @@ module Children = struct
 end
 
 module Make (C : Negamax_intf.Config) = struct
-  let [@zero_alloc] rec solve game ~a:alpha ~b:beta =
+  (* positions visited since the last top-level [solve] began *)
+  let nodes = ref 0
+
+  let rec solve (cache @ local) game ~a:alpha ~b:beta =
+    Int.incr nodes;
     if is_full game then 0
     else
       let children = Children.of_board game in
-      let legal = Children.legal children in
-      (* if any legal move wins, we are done without recursing *)
-      if I64.O.(Children.winning children <> zero) then
-        (width * height + 1 - num_moves game) / 2
-      else
+      match Children.winning children with
+      | #0L ->
+        let key = Bitboard.key game in
         let upper = (width * height - 1 - num_moves game) / 2 in
+        (* an earlier search of this position may have found a tighter bound *)
+        let upper = min upper (I64.to_int_trunc (Cache.find cache key)) in
         let beta = min beta upper in
         if alpha >= beta then beta
         else
-          (* an explicit loop rather than [Array.fold_until]: see [Negamax] *)
-          let [@loop] rec search alpha i =
-            if i = Array.length C.order then alpha
-            else
-              let col = C.order.(i) in
-              if I64.O.(legal land (#1L lsl col) = zero) then search alpha (i + 1)
-              else
-                let score = -solve (Children.get children col) ~a:(-beta) ~b:(-alpha) in
-                if score >= beta then score else search (max alpha score) (i + 1)
+          let legal = Children.legal children in
+          let score = 
+            Array.fold_until C.order ~init:alpha ~finish:Fn.id
+              ~f:(fun [@inline] alpha col ->
+                match I64.O.(legal land (#1L lsl col)) with
+                | #0L -> Continue alpha
+                | _ ->
+                  let score =
+                    -solve cache (Children.get children col) ~a:(-beta) ~b:(-alpha)
+                  in
+                  if score >= beta then Stop score
+                  else Continue (max alpha score))
           in
-          search alpha 0
+          if score < beta then
+            Cache.set cache ~key ~data:(I64.of_int score);
+          score
+      (* if any legal move wins, we are done *)
+      | _ -> (width * height + 1 - num_moves game) / 2
+
+  let node_count () = !nodes
+
+  (* Searches with [with_cache] if given, which may already hold bounds from
+     earlier solves; otherwise with a fresh cache, freed when this returns *)
+  let solve ?(with_cache : Cache.t option @ local) game ~a ~b =
+    nodes := 0;
+    let cache =
+      match with_cache with
+      | Some cache -> cache
+      | None -> Cache.create Cache.default_size
+    in
+    solve cache game ~a ~b [@nontail]
 
   module Strong = struct
     let bound = width * height / 2
-    let solve game = solve game ~a:(-bound) ~b:bound
+    let solve ?with_cache game = solve ?with_cache game ~a:(-bound) ~b:bound
   end
 
   module Weak = struct
-    let solve game : Player.outcome =
-      let score = solve game ~a:(-1) ~b:1 in
+    let solve ?with_cache game : Player.outcome =
+      let score = solve ?with_cache game ~a:(-1) ~b:1 in
       let player = Bitboard.current_player game in
       if score > 0 then Win player
       else if score < 0 then Win (Player.other player)
