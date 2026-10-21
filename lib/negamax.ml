@@ -6,7 +6,7 @@ module Make (C : Negamax_intf.Config) = struct
   (* positions visited since the last top-level [solve] began *)
   let nodes = ref 0
 
-  let[@zero_alloc] rec solve_with (cache @ local) game ~a:alpha ~b:beta =
+  let rec solve_with (cache @ local) game ~a:alpha ~b:beta =
     Int.incr nodes;
     if is_full game
     then 0
@@ -32,21 +32,20 @@ module Make (C : Negamax_intf.Config) = struct
         if alpha >= beta
         then beta
         else (
-          (* an explicit loop rather than [Array.fold_until]: with [C.order] abstract, the
-             generic fold cannot rule out a float array and may allocate *)
-          let[@inline] [@loop] rec search alpha i =
-            if i = Array.length C.order
-            then alpha
-            else (
-              match play game C.order.(i) with
-              | T #(Some, next) ->
-                (* the opponent's window is ours, negated and swapped *)
-                let score = -solve_with cache next ~a:(-beta) ~b:(-alpha) in
-                (* beta cutoff: the opponent would never let us reach this position *)
-                if score >= beta then score else search (max alpha score) (i + 1)
-              | T #(None, _) -> search alpha (i + 1))
+          let score =
+            Array.fold_until
+              C.order
+              ~init:alpha
+              ~finish:Fn.id
+              ~f:(fun [@inline] alpha col ->
+                match play game col with
+                | T #(Some, next) ->
+                  (* the opponent's window is ours, negated and swapped *)
+                  let score = -solve_with cache next ~a:(-beta) ~b:(-alpha) in
+                  (* beta cutoff: the opponent would never let us reach this position *)
+                  if score >= beta then Stop score else Continue (max alpha score)
+                | T #(None, _) -> Continue alpha)
           in
-          let score = search alpha 0 in
           (* below [beta] means no move caused a cutoff, so [score] is an upper bound *)
           if score < beta then Cache.set cache ~key ~data:(I64.of_int score);
           score)))
@@ -75,11 +74,10 @@ module Make (C : Negamax_intf.Config) = struct
     let solve ?with_cache game : Player.outcome =
       let score = solve ?with_cache game ~a:(-1) ~b:1 in
       let player = Bitboard.current_player game in
-      if score > 0
-      then Win player
-      else if score < 0
-      then Win (Player.other player)
-      else Draw
+      match Ordering.of_int (compare score 0) with
+      | Equal -> Draw
+      | Greater -> Win player
+      | Less -> Win (Player.other player)
     ;;
   end
 end
