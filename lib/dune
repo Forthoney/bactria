@@ -6,4 +6,4 @@
  (ocamlopt_flags
   (:standard -O3))
  (preprocess
-  (pps ppx_template)))
+  (pps ppx_template ocaml_simd.ppx)))

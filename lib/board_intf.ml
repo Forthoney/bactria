@@ -10,6 +10,9 @@ module type S = sig
   val height : int
   val size : int
   val can_play : t -> int -> bool
+
+  (* I really wanted this to be option, but that complicates using play with when t has
+     non_value kind *)
   val play : t @ unique -> int -> #(played * t) @ unique
   val create : unit -> t @ unique
   val is_full : t -> bool
