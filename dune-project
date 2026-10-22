@@ -1,5 +1,7 @@
 (lang dune 3.24)
 
+(using oxcaml 0.1)
+
 (name bactria)
 
 (implicit_transitive_deps false)
@@ -21,7 +23,16 @@
  (name bactria)
  (synopsis "A short synopsis")
  (description "A longer description")
- (depends ocaml base core unboxed unboxed_datatypes ppx_template ocaml_simd)
+ (depends
+  (ocaml-variants
+   (= 5.2.0+ox))
+  ocaml
+  base
+  core
+  unboxed
+  unboxed_datatypes
+  ppx_template
+  ocaml_simd)
  (tags
   ("add topics" "to describe" your project)))
 

@@ -9,37 +9,46 @@ let slot_to_char = function
 ;;
 
 type t =
-  { board : slot Array.t Array.t
-  ; mutable turn : Player.t
+  { board : slot array array
+  ; mutable moves : int
   }
 
 let width = 7
 let height = 6
+let size = width * height
 
-let play ({ board; turn } as game) col =
-  match Array.findi ~f:(fun _ slot -> Or_null.is_null slot) board.(col) with
-  | None -> false
-  | exception Invalid_argument _ -> false
-  | Some (row, _) ->
-    board.(col).(row) <- This turn;
-    game.turn <- Player.other turn;
-    true
+let create () =
+  { board = [| [| Null for _ = 0 to height - 1 |] for _ = 0 to width - 1 |]; moves = 0 }
 ;;
 
-let make () =
-  let board = Array.init width ~f:(fun _ -> Array.create ~len:height Null) in
-  { board; turn = Player.Red }
-;;
-
-let is_full { board; turn = _ } =
+let is_full { board; moves = _ } =
   Array.for_all ~f:(Array.for_all ~f:Or_null.is_this) board
 ;;
 
-let num_moves { board; turn = _ } =
-  Array.sum (module Int) ~f:(Array.count ~f:Or_null.is_this) board
+let num_moves { board = _; moves } = moves
+let current_player game = if num_moves game % 2 = 0 then Player.Red else Player.Yellow
+
+let can_play { board; moves = _ } col =
+  0 <= col && col < width && Or_null.is_null board.(col).(height - 1)
 ;;
 
-let to_string { board; turn = _ } =
+let play (game @ unique) col : #(Board_intf.played * t) @ unique =
+  if col < 0 || col >= width
+  then #(Out_of_bound, game)
+  else (
+    let played : Board_intf.played =
+      let ({ board; moves } as g) = borrow_ game in
+      match Array.findi ~f:(fun _ slot -> Or_null.is_null slot) board.(col) with
+      | None -> Full
+      | Some (row, _) ->
+        board.(col).(row) <- This (current_player g);
+        g.moves <- moves + 1;
+        Legal
+    in
+    #(played, game))
+;;
+
+let to_string { board; moves = _ } =
   let line_length = 2 * width in
   String.init
     (((height + 1) * line_length) - 1)
@@ -56,5 +65,3 @@ let to_string { board; turn = _ } =
           (* the footer: one digit per column, so [width] must stay below 10 *)
           Char.of_int_exn (Char.to_int '1' + col))
 ;;
-
-let current_player { board = _; turn } = turn

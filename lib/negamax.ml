@@ -20,7 +20,7 @@ let solve ?(with_cache : Cache.t option @ local) (module Stat : Stat_intf.S) gam
         col < width
         &&
         match play game col with
-        | T #(Some, next) when is_won next -> true
+        | #(Legal, next) when is_won next -> true
         | _ -> has_winning_move (col + 1)
       in
       let moves = num_moves game in
@@ -44,8 +44,8 @@ let solve ?(with_cache : Cache.t option @ local) (module Stat : Stat_intf.S) gam
             then alpha
             else (
               match play game order.(i) with
-              | T #(None, _) -> search (i + 1) alpha
-              | T #(Some, next) ->
+              | #((Out_of_bound | Full), _) -> search (i + 1) alpha
+              | #(Legal, next) ->
                 (* the opponent's window is ours, negated and swapped *)
                 let score = I64.O.(-loop next ~a:(-beta) ~b:(-alpha)) in
                 (* beta cutoff: the opponent would never let us reach this position *)

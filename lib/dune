@@ -1,6 +1,8 @@
 (library
  (name bactria)
  (libraries base unboxed unboxed_datatypes ocaml_simd ocaml_simd.avx)
+ (flags
+  (:standard -extension comprehensions))
  (ocamlopt_flags
   (:standard -O3))
  (preprocess

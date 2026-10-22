@@ -141,9 +141,29 @@ let solve ?(with_cache : Cache.t option @ local) (module Stat : Stat_intf.S) gam
           if I64.O.(score < beta) then Cache.set cache ~key ~data:score;
           score)))
   in
-  let bound = I64.of_int (width * height / 2) in
+  (* the score is in [min, max]: narrow it with null-window searches until they meet *)
+  let rec window min max =
+    let open I64.O in
+    if min >= max
+    then min
+    else (
+      let med = min + ((max - min) / #2L) in
+      let med =
+        if med <= zero && min / #2L < med
+        then min / #2L
+        else if med >= zero && max / #2L > med
+        then max / #2L
+        else med
+      in
+      let score = loop game ~a:med ~b:(med + #1L) in
+      if score <= med then window min score else window score max)
+  in
+  let size = I64.of_int Bitboard.size in
+  let moves = I64.of_int (Bitboard.num_moves game) in
   Stat.start stat;
-  let score = loop game ~a:(I64.neg bound) ~b:bound in
+  let min = I64.O.(-(size - moves) / #2L) in
+  let max = I64.O.((size + #1L - moves) / #2L) in
+  let score = window min max in
   Stat.finish stat;
   I64.to_int_exn score
 ;;

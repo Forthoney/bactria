@@ -26,7 +26,8 @@ type key = int64#
 
 let width = 7
 let height = 6
-let empty = #{ pos = #0L; nonempty = #0L }
+let size = width * height
+let create () = #{ pos = #0L; nonempty = #0L }
 
 (* A unique identifier for a position, at most 49 bits. [pos + nonempty] adds one bit just
    above the top stone of each column, which encodes the column heights, and [pos] alone
@@ -58,13 +59,16 @@ let can_play #{ pos; nonempty } col =
       clearing it and setting the first empty cell above: 0b0000111 + 0b0000001 =
       0b0001000. Other columns are untouched because the carry stops at the first 0.
       OR-ing with the old [nonempty] puts the cleared stones back, leaving 0b0001111. *)
-let play (#{ pos; nonempty } as game) col =
-  if can_play game col
-  then
-    (Option_u.some [@kind bits64 & bits64])
-      I64.O.(
-        #{ pos = pos lxor nonempty; nonempty = nonempty lor (nonempty + bot_mask col) })
-  else (Option_u.none [@kind bits64 & bits64]) ()
+let play (#{ pos; nonempty } as game) col : #(Board_intf.played * t) =
+  if col < 0 || col >= width
+  then #(Out_of_bound, game)
+  else if I64.O.(nonempty land top_mask col <> zero)
+  then #(Full, game)
+  else
+    #( Legal
+     , I64.O.(
+         #{ pos = pos lxor nonempty; nonempty = nonempty lor (nonempty + bot_mask col) })
+     )
 ;;
 
 let num_moves #{ pos = _; nonempty } = I64.to_int_trunc (I64.popcount nonempty)
@@ -111,30 +115,31 @@ let current_player board = if num_moves board % 2 = 0 then Player.Red else Playe
 
 let[@zero_alloc ignore] to_board board : Board.t =
   let #{ pos; nonempty } = board in
+  let moves = num_moves board in
   let to_move = current_player board in
   let other = Player.other to_move in
-  let board =
-    Array.init width ~f:(fun [@zero_alloc ignore] col ->
-      Array.init height ~f:(fun row ->
-        let bit = I64.O.(#1L lsl Int.(col_shift col + row)) in
-        if I64.O.(nonempty land bit = zero)
-        then Null
-        else if I64.O.(pos land bit = zero)
-        then This other
-        else This to_move))
+  let fill row col =
+    let bit = I64.O.(#1L lsl Int.(col_shift col + row)) in
+    if I64.O.(nonempty land bit = zero)
+    then Null
+    else if I64.O.(pos land bit = zero)
+    then This other
+    else This to_move
   in
-  { board; turn = to_move }
+  { board = [| [| fill row col for row = 0 to height - 1 |] for col = 0 to width - 1 |]
+  ; moves
+  }
 ;;
 
 (* [String.fold] can't be used here: its accumulator must have a single-register layout,
    and [t] is [bits64 & bits64]. *)
 let init_with moves =
-  let mutable board = empty in
+  let mutable board = create () in
   for i = 0 to String.length moves - 1 do
     let col = Char.to_int moves.[i] - Char.to_int '1' in
     match play board col with
-    | T #(Some, board') -> board <- board'
-    | T #(None, _) -> invalid_arg (String.of_char moves.[i])
+    | #(Legal, board') -> board <- board'
+    | #((Out_of_bound | Full), _) -> invalid_arg (String.of_char moves.[i])
   done;
   board
 ;;

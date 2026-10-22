@@ -16,11 +16,11 @@ let rec interactive board =
       interactive board
     in
     (match Int.of_string_opt line with
-     | Some i when i <= Bitboard.width && i > 0 ->
-       let col = i - 1 in
-       (match Bitboard.play board col with
-        | T #(None, _) -> retry (sprintf "column %d is full" i)
-        | T #(Some, next) ->
+     | Some i ->
+       (match Bitboard.play board (i - 1) with
+        | #(Out_of_bound, _) -> retry (sprintf "there is no column %d" i)
+        | #(Full, _) -> retry (sprintf "column %d is full" i)
+        | #(Legal, next) ->
           (match Bitboard.outcome next with
            | Continue -> interactive next
            | (Win _ | Draw) as outcome ->
@@ -35,5 +35,5 @@ let command =
   Command.basic
     ~summary:"Play a game interactively"
     (let%map_open.Command () = return () in
-     fun () -> interactive Bitboard.empty)
+     fun () -> interactive (Bitboard.create ()))
 ;;
